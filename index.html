@@ -42,6 +42,9 @@
     width: 100vw;
     height: 100vh;
     background: #BFE8F5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   canvas#game {
     width: 100%;
@@ -115,6 +118,234 @@
     transform: translateY(4px);
     box-shadow: 0 1px 0 rgba(247,148,29,0.55), 0 2px 8px rgba(0,0,0,0.15);
   }
+
+  /* Portrait Game Boy layout */
+  .controls-landscape { display: contents; }
+  .controls-portrait { display: none; }
+
+  @media (orientation: portrait) {
+    html, body {
+      height: 100%;
+    }
+    body {
+      flex-direction: column;
+      justify-content: flex-start;
+    }
+    #screen-wrap {
+      position: relative;
+      flex: 1 1 auto;
+      width: 100%;
+      height: auto;
+      min-height: 0;
+      inset: auto;
+      background: #111;
+    }
+    canvas#game {
+      width: 100%;
+      height: auto;
+      max-height: 100%;
+      aspect-ratio: 16 / 9;
+      object-fit: contain;
+    }
+    #touch-controls {
+      position: relative;
+      flex: 0 0 auto;
+      width: 100%;
+      min-height: 42vh;
+      max-height: 48vh;
+      padding: 0;
+      pointer-events: auto;
+      background: linear-gradient(180deg, #5a2890 0%, #4a1f78 100%);
+      border-top: 3px solid rgba(255,255,255,0.08);
+      box-shadow: inset 0 2px 0 rgba(255,255,255,0.06);
+    }
+    .controls-landscape { display: none; }
+    .controls-portrait {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      height: 100%;
+      padding: 10px 16px 18px;
+      gap: 8px;
+    }
+    .gb-brand {
+      text-align: center;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.28em;
+      color: rgba(255,255,255,0.45);
+      flex: 0 0 auto;
+    }
+    .gb-main {
+      flex: 1 1 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 8px;
+      min-height: 0;
+    }
+    .gb-dpad {
+      position: relative;
+      width: 132px;
+      height: 56px;
+      flex: 0 0 auto;
+    }
+    .gb-dpad-shell {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+    .gb-dpad-arm {
+      position: absolute;
+      background: linear-gradient(180deg, #d8d4cc 0%, #b8b4ac 100%);
+      box-shadow: 0 4px 0 #8a8680, inset 0 1px 0 rgba(255,255,255,0.55);
+    }
+    .gb-dpad-arm.h {
+      left: 0;
+      right: 0;
+      top: 0;
+      height: 56px;
+      border-radius: 8px;
+    }
+    .dpad-arrow {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 0;
+      height: 0;
+      pointer-events: none;
+      z-index: 1;
+    }
+    .dpad-arrow-l {
+      left: 16px;
+      border-top: 9px solid transparent;
+      border-bottom: 9px solid transparent;
+      border-right: 14px solid #5a5650;
+      filter: drop-shadow(0 1px 0 rgba(255,255,255,0.35));
+    }
+    .dpad-arrow-r {
+      right: 16px;
+      border-top: 9px solid transparent;
+      border-bottom: 9px solid transparent;
+      border-left: 14px solid #5a5650;
+      filter: drop-shadow(0 1px 0 rgba(255,255,255,0.35));
+    }
+    .dpad-notch {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 14px;
+      height: 14px;
+      margin: -7px 0 0 -7px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 30%, #b0aca4, #888480);
+      box-shadow: inset 0 2px 3px rgba(0,0,0,0.22);
+      pointer-events: none;
+      z-index: 1;
+    }
+    .dpad-hit {
+      position: absolute;
+      border: none;
+      background: transparent;
+      pointer-events: auto;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+      z-index: 2;
+    }
+    .dpad-left  { left: 0;  top: 0; width: 44px; height: 56px; }
+    .dpad-right { right: 0; top: 0; width: 44px; height: 56px; }
+    .gb-face {
+      position: relative;
+      width: 130px;
+      height: 130px;
+      flex: 0 0 auto;
+      margin-right: 4px;
+    }
+    .gb-face-btn {
+      position: absolute;
+      width: 58px;
+      height: 58px;
+      border: none;
+      border-radius: 50%;
+      background: linear-gradient(180deg, #d8d4cc 0%, #b8b4ac 100%);
+      color: #3a3840;
+      font-family: inherit;
+      font-size: 22px;
+      font-weight: 800;
+      box-shadow: 0 4px 0 #8a8680, inset 0 1px 0 rgba(255,255,255,0.55);
+      pointer-events: auto;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+    .gb-face-btn:active {
+      transform: translateY(3px);
+      box-shadow: 0 1px 0 #8a8680, inset 0 1px 0 rgba(255,255,255,0.35);
+    }
+    .gb-a { right: 0; top: 8px; }
+    .gb-b { left: 8px; bottom: 8px; }
+    .gb-system {
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      gap: 28px;
+      flex: 0 0 auto;
+      padding-top: 2px;
+    }
+    .gb-sys-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      border: none;
+      background: transparent;
+      pointer-events: auto;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+      padding: 0;
+    }
+    .gb-sys-pill {
+      width: 52px;
+      height: 16px;
+      border-radius: 999px;
+      background: linear-gradient(180deg, #d8d4cc 0%, #b8b4ac 100%);
+      box-shadow: 0 2px 0 #8a8680, inset 0 1px 0 rgba(255,255,255,0.55);
+      transform: rotate(-18deg);
+    }
+    .gb-sys-btn:active .gb-sys-pill {
+      transform: rotate(-18deg) translateY(2px);
+      box-shadow: 0 0 0 #8a8680, inset 0 1px 0 rgba(255,255,255,0.35);
+    }
+    .gb-sys-label {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      color: rgba(255,255,255,0.72);
+    }
+    .gb-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex: 0 0 auto;
+      padding: 0 4px;
+    }
+    .gb-menu-dot {
+      width: 28px;
+      height: 28px;
+      border: none;
+      border-radius: 50%;
+      background: linear-gradient(180deg, #d8d4cc 0%, #b8b4ac 100%);
+      box-shadow: 0 2px 0 #8a8680;
+      pointer-events: auto;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+      font-size: 14px;
+      color: #3a3840;
+    }
+    .gb-menu-dot:active {
+      transform: translateY(2px);
+      box-shadow: 0 0 0 #8a8680;
+    }
+  }
 </style>
 </head>
 <body>
@@ -124,15 +355,47 @@
 </div>
 
 <div id="touch-controls">
-  <div class="tbtn-group">
-    <div class="tbtn" id="btn-left">◀</div>
-    <div class="tbtn" id="btn-right">▶</div>
+  <div class="controls-landscape">
+    <div class="tbtn-group">
+      <div class="tbtn" id="btn-left">◀</div>
+      <div class="tbtn" id="btn-right">▶</div>
+    </div>
+    <div class="tbtn-group" style="margin-bottom: 10px;">
+      <div class="tbtn small" id="btn-pause">⏸</div>
+      <div class="tbtn small" id="btn-mute">🔊</div>
+    </div>
+    <div class="tbtn" id="btn-jump">▲</div>
   </div>
-  <div class="tbtn-group" style="margin-bottom: 10px;">
-    <div class="tbtn small" id="btn-pause">⏸</div>
-    <div class="tbtn small" id="btn-mute">🔊</div>
+
+  <div class="controls-portrait">
+    <div class="gb-brand">POCOYO</div>
+    <div class="gb-main">
+      <div class="gb-dpad">
+        <button type="button" class="dpad-hit dpad-left" id="btn-left-p" aria-label="Left"></button>
+        <button type="button" class="dpad-hit dpad-right" id="btn-right-p" aria-label="Right"></button>
+        <div class="gb-dpad-shell">
+          <div class="gb-dpad-arm h"></div>
+          <span class="dpad-arrow dpad-arrow-l" aria-hidden="true"></span>
+          <span class="dpad-arrow dpad-arrow-r" aria-hidden="true"></span>
+          <span class="dpad-notch" aria-hidden="true"></span>
+        </div>
+      </div>
+      <div class="gb-face">
+        <button type="button" class="gb-face-btn gb-b" id="btn-b">B</button>
+        <button type="button" class="gb-face-btn gb-a" id="btn-jump-p">A</button>
+      </div>
+    </div>
+    <div class="gb-system">
+      <button type="button" class="gb-sys-btn" id="btn-pause-p">
+        <span class="gb-sys-pill"></span>
+        <span class="gb-sys-label">START</span>
+      </button>
+    </div>
+    <div class="gb-footer">
+      <button type="button" class="gb-menu-dot" id="btn-menu" title="Mute">🔊</button>
+      <span style="width:28px;height:28px;opacity:0.35;color:#fff;font-size:18px;line-height:28px;text-align:center;">P</span>
+    </div>
   </div>
-  <div class="tbtn" id="btn-jump">▲</div>
 </div>
 
 <script>
@@ -333,8 +596,11 @@ function togglePause(){
 }
 function toggleMute(){
   muted = !muted;
-  const btn = document.getElementById('btn-mute');
-  if(btn) btn.textContent = muted ? '🔇' : '🔊';
+  const icon = muted ? '🔇' : '🔊';
+  ['btn-mute', 'btn-menu'].forEach(id=>{
+    const btn = document.getElementById(id);
+    if(btn) btn.textContent = icon;
+  });
 }
 
 window.addEventListener('keydown', e=>{
@@ -376,14 +642,30 @@ function bindTouchBtn(id,onDown,onUp){
   el.addEventListener('pointerleave', up);
   el.addEventListener('pointercancel', up);
 }
-bindTouchBtn('btn-left', ()=>input.left=true, ()=>input.left=false);
-bindTouchBtn('btn-right', ()=>input.right=true, ()=>input.right=false);
-bindTouchBtn('btn-jump',
-  ()=>{ if(!jumpHeld) jumpQueued=true; jumpHeld=true; input.up=true; handleStartOrRestart(); },
-  ()=>{ jumpHeld=false; input.up=false; if(player.vy<0) player.vy*=JUMP_CUT; }
-);
+function bindJump(onDown, onUp){
+  bindTouchBtn('btn-jump', onDown, onUp);
+  bindTouchBtn('btn-jump-p', onDown, onUp);
+}
+function bindMoveLeft(onDown, onUp){
+  bindTouchBtn('btn-left', onDown, onUp);
+  bindTouchBtn('btn-left-p', onDown, onUp);
+}
+function bindMoveRight(onDown, onUp){
+  bindTouchBtn('btn-right', onDown, onUp);
+  bindTouchBtn('btn-right-p', onDown, onUp);
+}
+
+const jumpDown = ()=>{ if(!jumpHeld) jumpQueued=true; jumpHeld=true; input.up=true; handleStartOrRestart(); };
+const jumpUp = ()=>{ jumpHeld=false; input.up=false; if(player.vy<0) player.vy*=JUMP_CUT; };
+
+bindMoveLeft(()=>input.left=true, ()=>input.left=false);
+bindMoveRight(()=>input.right=true, ()=>input.right=false);
+bindJump(jumpDown, jumpUp);
+bindTouchBtn('btn-b', jumpDown, jumpUp);
 bindTouchBtn('btn-pause', ()=>togglePause());
+bindTouchBtn('btn-pause-p', ()=>togglePause());
 bindTouchBtn('btn-mute', ()=>toggleMute());
+bindTouchBtn('btn-menu', ()=>toggleMute());
 
 canvas.addEventListener('pointerdown', (e)=>{
   ensureAudio();

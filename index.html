@@ -23,7 +23,7 @@
     width: 100%;
     height: 100%;
     overflow: hidden;
-    background: #BFE8F5;
+    background: #1B2436;
     font-family: 'Baloo 2', 'Arial Rounded MT Bold', Verdana, sans-serif;
     touch-action: none;
     -webkit-user-select: none;
@@ -41,7 +41,7 @@
     inset: 0;
     width: 100vw;
     height: 100vh;
-    background: #BFE8F5;
+    background: #1B2436;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -49,6 +49,7 @@
   canvas#game {
     width: 100%;
     height: 100%;
+    object-fit: contain;
     display: block;
     image-rendering: auto;
   }
@@ -451,7 +452,8 @@ const MOVE_ACCEL = 900;
 const MAX_SPEED = 140;
 const FRICTION = 900;
 const AIR_CONTROL = 0.85;
-const JUMP_SPEED = 340;
+const JUMP_SPEED = 360;
+const FALL_MULT = 1.3;
 const JUMP_CUT = 0.45;
 const MAX_FALL = 420;
 const COYOTE_TIME = 0.1;
@@ -480,7 +482,7 @@ function rectsOverlap(a,b){
 
 /* ---- multi-level data ---- */
 let currentLevel = 1;
-const TOTAL_LEVELS = 2;
+const TOTAL_LEVELS = 3;
 
 const LEVEL_1 = {
   worldLen: 2700,
@@ -589,7 +591,55 @@ const LEVEL_2 = {
   grass: {top:'#3A7A4A', edge:'#2A5A38', dirt:'#6B4A2E', dirtDark:'#4A321C'}
 };
 
-function getLevel(){ return currentLevel === 2 ? LEVEL_2 : LEVEL_1; }
+// Level 3: stormy dusk – long voids, fast movers, more spiky urchins and bees
+const LEVEL_3 = {
+  worldLen: 3200,
+  gaps: [[300,420],[640,800],[1050,1250],[1500,1560],[1750,1980],[2300,2520],[2750,2830]],
+  platforms: [
+    {x:150,y:175,w:60,h:12},
+    {x:330,y:190,w:50,h:12, moveMin:310, moveMax:415, moveSpeed:55, moveAxis:'x'},
+    {x:660,y:185,w:42,h:12},
+    {x:740,y:175,w:42,h:12},
+    {x:900,y:165,w:50,h:12},
+    {x:1080,y:185,w:48,h:12, moveMin:1060, moveMax:1165, moveSpeed:50, moveAxis:'x'},
+    {x:1180,y:175,w:46,h:12},
+    {x:1350,y:170,w:50,h:12},
+    {x:1780,y:185,w:44,h:12},
+    {x:1860,y:180,w:46,h:12, moveMin:150, moveMax:195, moveSpeed:38, moveAxis:'y'},
+    {x:1930,y:175,w:44,h:12},
+    {x:2100,y:160,w:50,h:12},
+    {x:2330,y:185,w:52,h:12, moveMin:2310, moveMax:2455, moveSpeed:60, moveAxis:'x'},
+    {x:2470,y:175,w:44,h:12},
+    {x:2620,y:170,w:50,h:12},
+    {x:2950,y:160,w:55,h:12}
+  ],
+  enemies: [
+    {x:180,minX:60,maxX:290,y:GROUND_Y-18,w:18,h:18,speed:48,dir:1, type:'cloud'},
+    {x:700,minX:650,maxX:790,y:125,w:16,h:14,speed:58,dir:1, type:'bee'},
+    {x:900,minX:820,maxX:1040,y:GROUND_Y-14,w:16,h:14,speed:24,dir:-1, type:'urchin'},
+    {x:1350,minX:1270,maxX:1490,y:GROUND_Y-16,w:16,h:16,speed:55,dir:1, type:'duck'},
+    {x:1650,minX:1570,maxX:1745,y:118,w:16,h:14,speed:66,dir:-1, type:'bee'},
+    {x:2050,minX:1990,maxX:2290,y:GROUND_Y-14,w:16,h:14,speed:26,dir:1, type:'urchin'},
+    {x:2150,minX:2000,maxX:2290,y:GROUND_Y-18,w:18,h:18,speed:60,dir:-1, type:'cloud', hop:true},
+    {x:2400,minX:2310,maxX:2510,y:132,w:16,h:14,speed:70,dir:1, type:'bee'},
+    {x:2650,minX:2530,maxX:2740,y:GROUND_Y-16,w:16,h:16,speed:56,dir:-1, type:'duck'},
+    {x:2900,minX:2840,maxX:3050,y:GROUND_Y-14,w:16,h:14,speed:28,dir:1, type:'urchin'},
+    {x:3000,minX:2900,maxX:3110,y:GROUND_Y-18,w:18,h:18,speed:65,dir:-1, type:'cloud', hop:true}
+  ],
+  flagX: 3120,
+  timeLimit: 260,
+  sky: {top:'#241A3D', mid:'#5E2F55', bottom:'#E08A55'},
+  hills: {far:'#4A3560', near:'#33304F'},
+  enemyStyle: 'storm',
+  night: true,
+  grass: {top:'#4A4468', edge:'#332F4E', dirt:'#5A4438', dirtDark:'#3C2C24'}
+};
+
+function getLevel(){
+  if(currentLevel === 3) return LEVEL_3;
+  if(currentLevel === 2) return LEVEL_2;
+  return LEVEL_1;
+}
 
 let WORLD_LEN = LEVEL_1.worldLen;
 let GAPS = LEVEL_1.gaps;
@@ -666,20 +716,20 @@ function applyLevel(lvl){
   window.__levelNight = !!lvl.night;
 }
 
-function makeCoinRow(p,count,gap,yOff){
+function makeBallRow(p,count,gap,yOff){
   const arr = [];
   const startX = p.x + (p.w-(count-1)*gap)/2;
-  for(let i=0;i<count;i++) arr.push({x:startX+i*gap, y:p.y-yOff, taken:false});
+  for(let i=0;i<count;i++) arr.push({x:startX+i*gap, y:p.y-yOff, taken:false, plat:p, offX:(startX+i*gap)-p.x, offY:-yOff});
   return arr;
 }
-function buildCoins(){
-  let coins = [];
-  // sparse: 1 coin per platform (2 on longer ones), no free arcs
+function buildBalls(){
+  let balls = [];
+  // sparse: 1 ball per platform (2 on longer ones)
   for(const p of PLATFORM_TEMPLATE){
     const n = p.w > 48 ? 2 : 1;
-    coins = coins.concat(makeCoinRow(p, n, 16, 16));
+    balls = balls.concat(makeBallRow(p, n, 16, 16));
   }
-  return coins;
+  return balls;
 }
 
 /* state */
@@ -690,8 +740,10 @@ let muted = false;
 let shakeTimer = 0, shakeMag = 0;
 let elapsed = 0;
 let jumpHeld = false, jumpQueued = false, jumpBufferTimer = 0;
+let menuLock = 0;
 let nextLifeScore = 2000;
 let bestScore = 0;
+let showMarshMessage = false;
 try { bestScore = parseInt(localStorage.getItem('pocoyo_best')||'0',10)||0; } catch(e){}
 function saveBest(){ if(score>bestScore){ bestScore = score; try{ localStorage.setItem('pocoyo_best', String(bestScore)); }catch(e){} } }
 
@@ -705,7 +757,7 @@ function freshEntities(){
       type: e.type || 'cloud',
       _baseY: e.y
     })),
-    coins: buildCoins()
+    coins: buildBalls()
   };
 }
 
@@ -738,6 +790,9 @@ resetGame();
 const input = { left:false, right:false, up:false, down:false };
 
 function handleStartOrRestart(){
+  if(menuLock > 0) return;
+  if(showMarshMessage){ showMarshMessage = false; return; }
+  menuLock = 0.35;
   if(state==='start'){ currentLevel = 1; resetGame(); state='playing'; }
   else if(state==='gameover'){ currentLevel = 1; resetGame(); state='playing'; }
   else if(state==='paused'){ state='playing'; }
@@ -777,6 +832,7 @@ window.addEventListener('keydown', e=>{
   if(e.key==='ArrowUp'||e.key==='w'||e.key==='W'||e.key===' '){
     if(!jumpHeld) jumpQueued = true;
     jumpHeld = true;
+    if(showMarshMessage){ showMarshMessage = false; return; }
     handleStartOrRestart();
   }
   if(e.key==='p'||e.key==='P'||e.key==='Escape') togglePause();
@@ -830,13 +886,32 @@ bindTouchBtn('btn-pause-p', ()=>togglePause());
 bindTouchBtn('btn-mute', ()=>toggleMute());
 bindTouchBtn('btn-menu', ()=>toggleMute());
 
+function pointerToGame(e){
+  const rect = canvas.getBoundingClientRect();
+  const scale = Math.min(rect.width / GAME_W, rect.height / GAME_H);
+  const drawW = GAME_W * scale, drawH = GAME_H * scale;
+  const offsetX = (rect.width - drawW) / 2, offsetY = (rect.height - drawH) / 2;
+  return {
+    x: (e.clientX - rect.left - offsetX) / scale,
+    y: (e.clientY - rect.top - offsetY) / scale
+  };
+}
+
 canvas.addEventListener('pointerdown', (e)=>{
   ensureAudio();
+  if(state==='win' && currentLevel >= TOTAL_LEVELS){
+    if(showMarshMessage){ showMarshMessage = false; return; }
+    const p = pointerToGame(e);
+    const btnW = 120, btnH = 22, btnX = GAME_W - btnW - 10, btnY = GAME_H - btnH - 8;
+    const inBtn = p.x >= btnX && p.x <= btnX+btnW && p.y >= btnY && p.y <= btnY+btnH;
+    if(inBtn){ showMarshMessage = true; return; }
+  }
   handleStartOrRestart();
 });
 
 document.addEventListener('visibilitychange', ()=>{
   if(document.hidden && state==='playing') state='paused';
+  lastTime = 0;
 });
 
 /* audio */
@@ -873,34 +948,54 @@ const SFX = {
 
 /* physics */
 function moveAndCollide(ent,dt,solids){
-  ent.x += ent.vx*dt;
-  ent.x = clamp(ent.x, 0, WORLD_LEN-ent.w);
-  for(const r of solids){
-    if(!rectsOverlap(ent,r)) continue;
-    // standing on top — allow walking off edges without side-teleport
-    if((ent.y + ent.h) - r.y <= 6) continue;
-    if(ent.vx>0) ent.x = r.x-ent.w;
-    else if(ent.vx<0) ent.x = r.x+r.w;
-    ent.vx = 0;
-  }
-  ent.y += ent.vy*dt;
+  // Sub-step the motion so fast falls can never tunnel through thin platforms.
+  const dist = Math.max(Math.abs(ent.vx*dt), Math.abs(ent.vy*dt));
+  const steps = Math.max(1, Math.min(8, Math.ceil(dist/4)));
+  const sdt = dt/steps;
   ent.onGround = false;
-  for(const r of solids){
-    if(rectsOverlap(ent,r)){
-      if(ent.vy>0){ ent.y = r.y-ent.h; ent.vy=0; ent.onGround=true; }
-      else if(ent.vy<0){ ent.y = r.y+r.h; ent.vy = 0; }
+  for(let s=0; s<steps; s++){
+    const prevX = ent.x;
+    ent.x += ent.vx*sdt;
+    ent.x = clamp(ent.x, 0, WORLD_LEN-ent.w);
+    for(const r of solids){
+      if(!rectsOverlap(ent,r)) continue;
+      if((ent.y + ent.h) - r.y <= 2) continue; // resting on top: not a wall
+      // Test against the platform's previous side too, so a platform sliding
+      // sideways can't sweep through the player between frames.
+      const dx = r._dx || 0;
+      const leftPrev = r.x - dx, rightPrev = leftPrev + r.w;
+      if(ent.vx>0 && (prevX + ent.w <= r.x + 1 || prevX + ent.w <= leftPrev + 1)){ ent.x = r.x - ent.w; ent.vx = 0; }
+      else if(ent.vx<0 && (prevX >= r.x + r.w - 1 || prevX >= rightPrev - 1)){ ent.x = r.x + r.w; ent.vx = 0; }
+      else if(dx !== 0 && ent.vx === 0){
+        // standing still while a platform slides into us: get pushed, not swallowed
+        if(dx > 0) ent.x = r.x - ent.w; else ent.x = r.x + r.w;
+      }
+    }
+    const prevY = ent.y;
+    ent.y += ent.vy*sdt;
+    for(const r of solids){
+      if(!rectsOverlap(ent,r)) continue;
+      // For moving platforms, also test against where the top was last frame,
+      // so a platform rising toward a falling player can never be tunneled through.
+      const dy = r._dy || 0;
+      const topPrev = r.y - dy;
+      const crossedTop = prevY + ent.h <= r.y + 1 || prevY + ent.h <= topPrev + 1;
+      const liftedInto = dy > 0 && ent.y + ent.h <= r.y + 10; // platform rose into us
+      if(ent.vy>=0 && (crossedTop || liftedInto)){ ent.y = r.y - ent.h; ent.vy = 0; ent.onGround = true; }
+      else if(ent.vy<0 && prevY >= r.y + r.h - 1){ ent.y = r.y + r.h; ent.vy = 0; }
     }
   }
 }
 
-function checkLedgeGrab(solids){
-  if(player.onGround || player.isLedgeHanging || player.vy < -80) return;
+function checkLedgeGrab(plats){
+  if(player.onGround || player.isLedgeHanging || player.isClimbing) return;
+  if(player.vy <= 0) return; // only while falling
 
-  for(const r of solids){
-    const vertOK = (player.y >= r.y - 4 && player.y <= r.y + 12);
+  for(const r of plats){
+    const vertOK = (player.y >= r.y - 6 && player.y <= r.y + 10);
     if(!vertOK) continue;
 
-    if((input.right || player.vx > 0) && Math.abs((player.x + player.w) - r.x) <= 6){
+    if(input.right && Math.abs((player.x + player.w) - r.x) <= 7){
       player.isLedgeHanging = true;
       player.facing = 1;
       player.x = r.x - player.w + 3;
@@ -911,7 +1006,7 @@ function checkLedgeGrab(solids){
       player.ledgeSide = 'left';
       break;
     }
-    if((input.left || player.vx < 0) && Math.abs(player.x - (r.x + r.w)) <= 6){
+    if(input.left && Math.abs(player.x - (r.x + r.w)) <= 7){
       player.isLedgeHanging = true;
       player.facing = -1;
       player.x = r.x + r.w - 3;
@@ -957,7 +1052,7 @@ function findSafeSpawn(x){
 }
 function loseLife(){
   lives--;
-  if(lives<=0){ state='gameover'; SFX.gameover(); saveBest(); return; }
+  if(lives<=0){ state='gameover'; menuLock = 0.7; SFX.gameover(); saveBest(); return; }
   const spawn = findSafeSpawn(checkpointX);
   player.x = spawn.x; player.y = spawn.y;
   player.vx = 0; player.vy = 0;
@@ -977,6 +1072,7 @@ function update(dt){
     if(player.y >= GROUND_Y-player.h){
       player.y = GROUND_Y-player.h;
       state = 'win';
+      menuLock = 0.7;
       score += Math.floor(timeLeft)*10;
       addPopup(player.x+player.w/2, player.y-10, 'TIME BONUS!', COLORS.gold);
       saveBest();
@@ -989,6 +1085,11 @@ function update(dt){
   if(state!=='playing') return;
 
   timeLeft = Math.max(0, timeLeft-dt);
+  if(timeLeft <= 0){
+    timeLeft = getLevel().timeLimit;
+    loseLife();
+    if(state !== 'playing') return;
+  }
 
   // --- moving platforms ---
   for(const p of PLATFORM_TEMPLATE){
@@ -1114,11 +1215,12 @@ function update(dt){
       }
     }
 
+    player.prevFeet = player.y + player.h;
     const preVY = player.vy;
-    player.vy = Math.min(MAX_FALL, player.vy+GRAVITY*dt);
+    player.vy = Math.min(MAX_FALL, player.vy + GRAVITY*(player.vy>0?FALL_MULT:1)*dt);
 
     moveAndCollide(player, dt, solids);
-    checkLedgeGrab(solids);
+    checkLedgeGrab(PLATFORM_TEMPLATE);
 
     if(!wasOnGround && player.onGround){
       const impact = clamp(preVY/JUMP_SPEED, 0, 1.4);
@@ -1137,6 +1239,10 @@ function update(dt){
         break;
       }
     }
+  }
+
+  for(const c of coins){
+    if(c.plat && c.plat.moveAxis){ c.x = c.plat.x + c.offX; c.y = c.plat.y + c.offY; }
   }
 
   for(const en of enemies){
@@ -1177,8 +1283,11 @@ function update(dt){
     }
 
     if(rectsOverlap(player, en)){
-      const canStomp = typ !== 'urchin' && typ !== 'bee';
-      if(canStomp && player.vy > 0 && (player.y + player.h) <= en.y + 8){
+      const canStomp = typ !== 'urchin';
+      const feetNow = player.y + player.h;
+      const feetBefore = (player.prevFeet != null ? player.prevFeet : feetNow);
+      const stomping = player.vy > 0 && (feetBefore <= en.y + 4 || feetNow <= en.y + en.h*0.6);
+      if(canStomp && stomping){
         en.alive = false; en.deathTimer = 0.3;
         player.vy = -JUMP_SPEED * 0.55;
         player.squashAmt = -0.3;
@@ -1188,7 +1297,7 @@ function update(dt){
         SFX.stomp();
       } else if(player.invuln <= 0){
         lives--;
-        if(lives <= 0){ state='gameover'; SFX.gameover(); saveBest(); return; }
+        if(lives <= 0){ state='gameover'; menuLock = 0.7; SFX.gameover(); saveBest(); return; }
         else{
           player.invuln = 1.3;
           player.isLedgeHanging = false;
@@ -1204,14 +1313,15 @@ function update(dt){
 
   for(const c of coins){
     if(c.taken) continue;
-    const coinRect = {x:c.x-5,y:c.y-5,w:10,h:10};
-    if(rectsOverlap(player,coinRect)){
+    const ballRect = {x:c.x-6,y:c.y-6,w:12,h:12};
+    if(rectsOverlap(player,ballRect)){
       c.taken = true; coinCount++; score += 10;
-      addPopup(c.x, c.y-6, '+10');
+      addPopup(c.x, c.y-8, '+10');
       spawnParticles(c.x,c.y,6,COLORS.gold);
       SFX.coin();
     }
   }
+
 
   if(score>=nextLifeScore){ lives++; nextLifeScore += 2000; }
   if(player.y>GAME_H+30){ loseLife(); }
@@ -1399,20 +1509,24 @@ function drawGround(){
   }
 }
 
-const BLOCK_COLORS = [
-  [COLORS.block1, COLORS.block1d],
-  [COLORS.block2, COLORS.block2d],
-  [COLORS.block3, COLORS.block3d],
-  [COLORS.block4, COLORS.block4d]
-];
+function getBlockColors(){
+  return [
+    [COLORS.block1, COLORS.block1d],
+    [COLORS.block2, COLORS.block2d],
+    [COLORS.block3, COLORS.block3d],
+    [COLORS.block4, COLORS.block4d]
+  ];
+}
 function drawPlatforms(){
+  const BLOCK_COLORS = getBlockColors();
   PLATFORM_TEMPLATE.forEach((p,i)=>{
     if(p.x+p.w<camX-20 || p.x>camX+GAME_W+20) return;
     const [main,dark] = BLOCK_COLORS[i%BLOCK_COLORS.length];
     const rad = 6;
 
     // moving platforms get a thin support pole (like the reference art)
-    if(p.moveAxis){
+    const overSolidGround = GROUND_RECTS.some(g => (p.x + p.w/2) > g.x && (p.x + p.w/2) < g.x + g.w);
+    if(p.moveAxis && overSolidGround){
       const cx = p.x + p.w/2;
       ctx.fillStyle = 'rgba(43,35,64,0.35)';
       ctx.fillRect(cx-1.5, p.y + p.h, 3, Math.max(8, GROUND_Y - p.y - p.h));
@@ -1470,20 +1584,22 @@ function drawBall(x,y){
   ctx.restore();
 }
 
-function drawCoins(){
+function drawBalls(){
   for(const c of coins){
     if(c.taken) continue;
     if(c.x<camX-20 || c.x>camX+GAME_W+20) continue;
-    const bobY = Math.sin(elapsed*4 + c.x)*2.5;
+    // gentle bob + soft squash so they read as hovering, not bouncing
+    const bobY = Math.sin(elapsed*2.2 + c.x)*1.6;
     const spin = Math.abs(Math.sin(elapsed*2+c.x*0.1));
     ctx.save();
     ctx.translate(c.x, c.y+bobY);
-    ctx.scale(0.5+spin*0.5, 1);
+    ctx.scale(0.85+spin*0.15, 1);
     ctx.translate(-c.x,-(c.y+bobY));
     drawBall(c.x, c.y+bobY);
     ctx.restore();
   }
 }
+
 
 function drawPopups(){
   for(const q of popups){
@@ -1783,6 +1899,7 @@ function drawHUD(){
   drawBall(178,16);
   drawGameText('x'+coinCount, 190, 21, {size:11, align:'left', color:COLORS.ink});
 
+
   roundRect(GAME_W-190,4,100,24,10);
   ctx.fillStyle = 'rgba(255,247,230,0.85)';
   ctx.fill();
@@ -1815,13 +1932,13 @@ function drawStartScreen(){
     drawGameText('TAP OR PRESS SPACE TO PLAY', GAME_W/2, 200, {size:11, align:'center', color:'#fff'});
   }
   drawGameText('ARROWS / TOUCH MOVE  ·  SPACE JUMP  ·  UP GRABS LEDGES', GAME_W/2, 225, {size:8, align:'center', color:'#E6F7FF'});
-  drawGameText('COLLECT BOUNCY BALLS & HOP ON GRUMPY CLOUDS!', GAME_W/2, 240, {size:8, align:'center', color:'#E6F7FF'});
+  drawGameText('HOP ON CLOUDS, DUCKS & BEES  ·  NEVER TOUCH SPIKY URCHINS', GAME_W/2, 240, {size:8, align:'center', color:'#E6F7FF'});
 }
 
 function drawPauseOverlay(){
   drawOverlay(0.45);
   drawGameText('PAUSED', GAME_W/2, 130, {size:22, align:'center', color:'#fff'});
-  drawGameText('PRESS P TO RESUME', GAME_W/2, 155, {size:10, align:'center', color:'#E6F7FF'});
+  drawGameText('PRESS P OR TAP PAUSE TO RESUME', GAME_W/2, 155, {size:10, align:'center', color:'#E6F7FF'});
 }
 
 function drawGameOverScreen(){
@@ -1841,10 +1958,10 @@ function drawWinScreen(){
     drawGameText('LEVEL '+currentLevel+' CLEAR!', GAME_W/2, 55, {size:20, align:'center', color:COLORS.gold, weight:'800'});
     drawGameText('GET READY FOR LEVEL '+(currentLevel+1), GAME_W/2, 80, {size:12, align:'center', color:'#fff'});
   } else {
-    drawGameText('YAY! YOU DID IT!', GAME_W/2, 42, {size:18, align:'center', color:COLORS.gold, weight:'800'});
-    drawGameText('ALL LEVELS COMPLETE!', GAME_W/2, 62, {size:11, align:'center', color:'#fff'});
-    drawGameText('HAPPY BIRTHDAY MARSH!', GAME_W/2, 88, {size:14, align:'center', color:COLORS.gold, weight:'800'});
-    drawGameText('THANK YOU FOR BEING OUR FRIEND', GAME_W/2, 106, {size:10, align:'center', color:'#fff'});
+    drawGameText('YAY! YOU DID IT!', GAME_W/2, 35, {size:16, align:'center', color:COLORS.gold, weight:'800'});
+    drawGameText('ALL LEVELS COMPLETE!', GAME_W/2, 52, {size:10, align:'center', color:'#fff'});
+    drawGameText('HAPPY BIRTHDAY MARSH!', GAME_W/2, 72, {size:13, align:'center', color:COLORS.gold, weight:'800'});
+    drawGameText('THANK YOU FOR BEING OUR FRIEND', GAME_W/2, 88, {size:9, align:'center', color:'#fff'});
   }
   drawPlayerSpriteAt(GAME_W/2, 175-bounce, 1);
   if(currentLevel < TOTAL_LEVELS){
@@ -1857,6 +1974,36 @@ function drawWinScreen(){
   if(Math.floor(elapsed*2)%2===0){
     const msg = currentLevel < TOTAL_LEVELS ? 'TAP OR PRESS SPACE FOR NEXT LEVEL' : 'TAP OR PRESS SPACE TO PLAY AGAIN';
     drawGameText(msg, GAME_W/2, 245, {size:9, align:'center', color:'#fff'});
+  }
+
+  // (FOR MARSH ONLY) button on final win screen
+  if(currentLevel >= TOTAL_LEVELS){
+    const btnW = 120, btnH = 22, btnX = GAME_W - btnW - 10, btnY = GAME_H - btnH - 8;
+    ctx.fillStyle = 'rgba(244,115,158,0.92)';
+    roundRect(btnX, btnY, btnW, btnH, 10); ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; roundRect(btnX, btnY, btnW, btnH, 10); ctx.stroke();
+    drawGameText('(FOR MARSH ONLY)', btnX + btnW/2, btnY + 16, {size:10, align:'center', color:'#fff', weight:'800'});
+  }
+
+  // Secret message overlay
+  if(showMarshMessage){
+    drawOverlay(0.85);
+    drawGameText('FOR MARSH', GAME_W/2, 40, {size:18, align:'center', color:COLORS.gold, weight:'800'});
+    const lines = [
+      'Hallo gng, i know what im boutta do or say rn is an A hole move, pls dont be mad,',
+      'but, gusto ko lang na malaman mo, although hindi halata, gusto parin kita, thats all,',
+      'i know, we had a big problems, gusto ko lang tlgang sabihan ka para lang alam mo,',
+      'dw tho im not expecting you to do anything abt this, idk if you like someone rn or',
+      'someones tryna court you but im not particularly asking to court you js sayin'
+    ];
+    let y = 70;
+    for(const line of lines){
+      drawGameText(line, GAME_W/2, y, {size:9, align:'center', color:'#fff'});
+      y += 18;
+    }
+    if(Math.floor(elapsed*2)%2===0){
+      drawGameText('TAP ANYWHERE TO CLOSE', GAME_W/2, 220, {size:10, align:'center', color:COLORS.gold});
+    }
   }
 }
 
@@ -1876,7 +2023,8 @@ function render(){
   drawGround();
   drawPlatforms();
   drawFlag();
-  drawCoins();
+  drawBalls();
+
   drawParticles();
   drawEnemies();
   drawPlayer();
@@ -1896,7 +2044,6 @@ function drawFlag(){
   ctx.fillStyle = '#E7B96E';
   ctx.fillRect(FLAG_X-1, poleTop, 4, GROUND_Y-poleTop);
   ctx.fillStyle = '#D1A052';
-  ctx.fillRect(FLAG_X-1, poleTop, 4, GROUND_Y-poleTop);
   ctx.fillRect(FLAG_X+1, poleTop, 2, GROUND_Y-poleTop);
 
   // pinwheel
@@ -1928,7 +2075,9 @@ function loop(ts){
   if(!lastTime) lastTime = ts;
   let dt = (ts-lastTime)/1000;
   lastTime = ts;
+  if(!(dt > 0) || dt > 0.25) dt = 1/60;
   dt = Math.min(dt, 0.033);
+  menuLock = Math.max(0, menuLock - dt);
   update(dt);
   render();
   requestAnimationFrame(loop);

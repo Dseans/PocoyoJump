@@ -948,42 +948,66 @@ const SFX = {
 
 /* physics */
 function moveAndCollide(ent,dt,solids){
-  // Sub-step the motion so fast falls can never tunnel through thin platforms.
-  const dist = Math.max(Math.abs(ent.vx*dt), Math.abs(ent.vy*dt));
-  const steps = Math.max(1, Math.min(8, Math.ceil(dist/4)));
-  const sdt = dt/steps;
   ent.onGround = false;
-  for(let s=0; s<steps; s++){
+
+  // ---- horizontal: sub-stepped so a sliding platform can't sweep through us ----
+  const hDist = Math.abs(ent.vx*dt);
+  const hSteps = Math.max(1, Math.min(8, Math.ceil(hDist/4)));
+  const hsdt = dt/hSteps;
+  for(let s=0; s<hSteps; s++){
     const prevX = ent.x;
-    ent.x += ent.vx*sdt;
+    ent.x += ent.vx*hsdt;
     ent.x = clamp(ent.x, 0, WORLD_LEN-ent.w);
     for(const r of solids){
-      if(!rectsOverlap(ent,r)) continue;
-      if((ent.y + ent.h) - r.y <= 2) continue; // resting on top: not a wall
-      // Test against the platform's previous side too, so a platform sliding
-      // sideways can't sweep through the player between frames.
+      // only a "wall" if there's real vertical overlap (more than resting-on-top contact)
+      if(ent.y + ent.h <= r.y + 2 || ent.y >= r.y + r.h) continue;
       const dx = r._dx || 0;
       const leftPrev = r.x - dx, rightPrev = leftPrev + r.w;
-      if(ent.vx>0 && (prevX + ent.w <= r.x + 1 || prevX + ent.w <= leftPrev + 1)){ ent.x = r.x - ent.w; ent.vx = 0; }
-      else if(ent.vx<0 && (prevX >= r.x + r.w - 1 || prevX >= rightPrev - 1)){ ent.x = r.x + r.w; ent.vx = 0; }
-      else if(dx !== 0 && ent.vx === 0){
+      if(ent.vx>0 && (prevX + ent.w <= r.x + 1 || prevX + ent.w <= leftPrev + 1) && ent.x + ent.w > r.x){ ent.x = r.x - ent.w; ent.vx = 0; }
+      else if(ent.vx<0 && (prevX >= r.x + r.w - 1 || prevX >= rightPrev - 1) && ent.x < r.x + r.w){ ent.x = r.x + r.w; ent.vx = 0; }
+      else if(dx !== 0 && ent.vx === 0 && ent.x + ent.w > r.x && ent.x < r.x + r.w){
         // standing still while a platform slides into us: get pushed, not swallowed
         if(dx > 0) ent.x = r.x - ent.w; else ent.x = r.x + r.w;
       }
     }
-    const prevY = ent.y;
-    ent.y += ent.vy*sdt;
+  }
+
+  // ---- vertical: true swept test, independent of frame speed, so no fall can ever tunnel ----
+  const prevY = ent.y;
+  const targetY = ent.y + ent.vy*dt;
+  if(ent.vy >= 0){
+    const prevBottom = prevY + ent.h;
+    const targetBottom = targetY + ent.h;
+    let landOnY = null;
     for(const r of solids){
-      if(!rectsOverlap(ent,r)) continue;
-      // For moving platforms, also test against where the top was last frame,
-      // so a platform rising toward a falling player can never be tunneled through.
+      if(ent.x + ent.w <= r.x + 0.01 || ent.x >= r.x + r.w - 0.01) continue; // no horizontal overlap
       const dy = r._dy || 0;
       const topPrev = r.y - dy;
-      const crossedTop = prevY + ent.h <= r.y + 1 || prevY + ent.h <= topPrev + 1;
-      const liftedInto = dy > 0 && ent.y + ent.h <= r.y + 10; // platform rose into us
-      if(ent.vy>=0 && (crossedTop || liftedInto)){ ent.y = r.y - ent.h; ent.vy = 0; ent.onGround = true; }
-      else if(ent.vy<0 && prevY >= r.y + r.h - 1){ ent.y = r.y + r.h; ent.vy = 0; }
+      // Our feet started at/above the platform's top (this frame's or last frame's position)
+      // and end at/below it — that's a crossing no matter how far we moved this frame.
+      const crossedTop = (prevBottom <= r.y + 1 && targetBottom >= r.y - 0.5) ||
+                          (prevBottom <= topPrev + 1 && targetBottom >= topPrev - 0.5);
+      // A platform rising fast (dy<0) can swallow us from below even if we weren't falling into it.
+      const liftedInto = dy < 0 && targetBottom >= r.y - 0.5 && targetBottom <= r.y + 10;
+      if(crossedTop || liftedInto){
+        if(landOnY === null || r.y < landOnY) landOnY = r.y;
+      }
     }
+    if(landOnY !== null){ ent.y = landOnY - ent.h; ent.vy = 0; ent.onGround = true; }
+    else { ent.y = targetY; }
+  } else {
+    const prevTop = prevY;
+    const targetTop = targetY;
+    let ceilY = null;
+    for(const r of solids){
+      if(ent.x + ent.w <= r.x + 0.01 || ent.x >= r.x + r.w - 0.01) continue;
+      const bottom = r.y + r.h;
+      if(prevTop >= bottom - 1 && targetTop <= bottom + 0.5){
+        if(ceilY === null || bottom > ceilY) ceilY = bottom;
+      }
+    }
+    if(ceilY !== null){ ent.y = ceilY; ent.vy = 0; }
+    else { ent.y = targetY; }
   }
 }
 

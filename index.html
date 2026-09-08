@@ -353,6 +353,8 @@
 
 <div id="screen-wrap">
   <canvas id="game" width="480" height="270"></canvas>
+  <img id="dance-gif" alt="" src="/__l5e/assets-v1/aa2cfcb6-2efe-403c-af2c-fcd41abd2a06/pocoyo-dance.gif" style="position:fixed;display:none;pointer-events:none;z-index:5;image-rendering:auto;">
+
 </div>
 
 <div id="touch-controls">
@@ -470,7 +472,10 @@ const COLORS = {
   block1:'#F7941D', block1d:'#D67A0D', block2:'#F4739E', block2d:'#D9548A',
   block3:'#9B6FD1', block3d:'#7E52B5', block4:'#2AAAE2', block4d:'#1584B8',
   cloudBody:'#7C8DB5', cloudBodyD:'#5E6E93', cloudCheek:'#A6B3D0',
-  gold:'#FFD100', danger:'#F4573C', text:'#2B2340', textLight:'#FFFFFF'
+  gold:'#FFD100', danger:'#F4573C', text:'#2B2340', textLight:'#FFFFFF',
+  pocoyoBlue:'#2AAAE2', pocoyoBlueDark:'#1584B8', pocoyoOrange:'#F7941D',
+  pocoyoYellow:'#FFD100', pocoyoPink:'#F4739E', pocoyoPurple:'#9B6FD1',
+  pocoyoGreen:'#8DC63F', cream:'#FFF7E6'
 };
 
 function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
@@ -478,6 +483,71 @@ function lerp(a,b,t){ return a+(b-a)*t; }
 function smoothstep(t){ return t*t*(3-2*t); }
 function rectsOverlap(a,b){
   return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y;
+}
+function drawStar(cx,cy,r,points,inner){
+  ctx.beginPath();
+  for(let i=0;i<points*2;i++){
+    const radius = i%2===0 ? r : (inner||r*0.45);
+    const a = (i/(points*2))*Math.PI*2 - Math.PI/2;
+    const px = cx + Math.cos(a)*radius;
+    const py = cy + Math.sin(a)*radius;
+    if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+  }
+  ctx.closePath();
+}
+function drawPocoyoHat(x,y,scale,tilt){
+  ctx.save();
+  ctx.translate(x,y);
+  ctx.rotate(tilt||0);
+  ctx.scale(scale,scale);
+  ctx.fillStyle = COLORS.pocoyoBlue;
+  ctx.beginPath();
+  ctx.ellipse(0,-4,9,7,0,Math.PI,0);
+  ctx.fill();
+  ctx.fillStyle = COLORS.pocoyoBlueDark;
+  ctx.beginPath();
+  ctx.ellipse(0,0,11,3,0,0,Math.PI*2);
+  ctx.fill();
+  ctx.fillStyle = COLORS.pocoyoBlue;
+  ctx.beginPath(); ctx.arc(0,-11,3.5,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+function drawSleepyBird(x,y,scale){
+  ctx.save();
+  ctx.translate(x,y);
+  ctx.scale(scale,scale);
+  ctx.fillStyle = '#9B6FD1';
+  ctx.beginPath();
+  ctx.ellipse(0,0,10,8,0,0,Math.PI*2);
+  ctx.fill();
+  ctx.fillStyle = '#7E52B5';
+  ctx.beginPath(); ctx.arc(-3,1,2,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(3,1,2,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#F4739E';
+  ctx.beginPath();
+  ctx.moveTo(-2,4); ctx.lineTo(2,4); ctx.lineTo(0,7); ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+function drawPatoHat(x,y,scale){
+  ctx.save();
+  ctx.translate(x,y);
+  ctx.scale(scale,scale);
+  ctx.fillStyle = '#2AAAE2';
+  ctx.beginPath(); ctx.ellipse(0,0,8,4,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#1584B8';
+  ctx.beginPath(); ctx.ellipse(0,-3,5,3,0,0,Math.PI); ctx.fill();
+  ctx.restore();
+}
+function drawEllyBall(x,y,scale){
+  ctx.save();
+  ctx.translate(x,y);
+  ctx.scale(scale,scale);
+  ctx.beginPath(); ctx.arc(0,0,7,0,Math.PI*2); ctx.fillStyle='#F4739E'; ctx.fill();
+  ctx.beginPath(); ctx.arc(0,0,7,0,Math.PI*2); ctx.lineWidth=1.5; ctx.strokeStyle='#D9548A'; ctx.stroke();
+  ctx.fillStyle='#fff';
+  ctx.beginPath(); ctx.arc(-2.5,-2.5,2,0,Math.PI*2); ctx.fill();
+  ctx.restore();
 }
 
 /* ---- multi-level data ---- */
@@ -776,7 +846,13 @@ function resetGame(keepScore){
     isLedgeHanging:false, ledgePlatform:null, ledgeSide:'left',
     isClimbing:false, climbTimer:0, climbDuration:0.32,
     climbFrom:{x:0,y:0}, climbMid:{x:0,y:0}, climbTo:{x:0,y:0},
-    runPhase:0, squashAmt:0
+    runPhase:0, squashAmt:0,
+    animState:'idle', animTimer:0,
+    hatTilt:0, scarfWave:0,
+    blinkTimer:0, isBlinking:false,
+    trailTimer:0,
+    isDancing:false, climbPlat:null
+
   };
   if(!keepScore){
     score = 0; coinCount = 0; lives = 3; nextLifeScore = 2000;
@@ -837,6 +913,8 @@ window.addEventListener('keydown', e=>{
   }
   if(e.key==='p'||e.key==='P'||e.key==='Escape') togglePause();
   if(e.key==='m'||e.key==='M') toggleMute();
+  if(e.key==='b'||e.key==='B') toggleDance();
+
 },{passive:false});
 
 window.addEventListener('keyup', e=>{
@@ -880,7 +958,16 @@ const jumpUp = ()=>{ jumpHeld=false; input.up=false; if(player.vy<0) player.vy*=
 bindMoveLeft(()=>input.left=true, ()=>input.left=false);
 bindMoveRight(()=>input.right=true, ()=>input.right=false);
 bindJump(jumpDown, jumpUp);
-bindTouchBtn('btn-b', jumpDown, jumpUp);
+function toggleDance(){
+  if(state !== 'playing') { handleStartOrRestart(); return; }
+  if(player.isDancing){ player.isDancing = false; return; }
+  if(player.onGround && !player.isLedgeHanging && !player.isClimbing){
+    player.isDancing = true;
+    player.vx = 0;
+  }
+}
+bindTouchBtn('btn-b', ()=>toggleDance());
+
 bindTouchBtn('btn-pause', ()=>togglePause());
 bindTouchBtn('btn-pause-p', ()=>togglePause());
 bindTouchBtn('btn-mute', ()=>toggleMute());
@@ -938,13 +1025,36 @@ function tone(freq,dur,type,vol,delay){
   osc.start(t0); osc.stop(t0+dur+0.03);
 }
 const SFX = {
-  jump: ()=>{ tone(560,0.09,'sine',0.1); tone(840,0.11,'sine',0.08,0.05); },
-  coin: ()=>{ tone(1046,0.07,'triangle',0.11); tone(1568,0.09,'triangle',0.1,0.05); },
-  stomp: ()=>{ tone(220,0.1,'sine',0.14); tone(160,0.12,'sine',0.1,0.06); },
-  hurt: ()=>{ tone(180,0.2,'sawtooth',0.12); },
-  win: ()=>{ [523,659,784,1047,1319].forEach((f,i)=>tone(f,0.18,'triangle',0.12,i*0.12)); },
-  gameover: ()=>{ [392,330,262,196].forEach((f,i)=>tone(f,0.22,'sawtooth',0.1,i*0.18)); }
+  jump: ()=>{
+    tone(440,0.08,'sine',0.12); tone(660,0.10,'sine',0.10,0.04);
+    tone(880,0.06,'triangle',0.07,0.08);
+  },
+  coin: ()=>{
+    tone(1318,0.06,'sine',0.10); tone(1760,0.08,'sine',0.10,0.05);
+    tone(2093,0.10,'triangle',0.09,0.10);
+  },
+  stomp: ()=>{
+    tone(180,0.10,'square',0.12); tone(120,0.14,'sine',0.12,0.05);
+    tone(90,0.16,'sine',0.10,0.10);
+  },
+  hurt: ()=>{
+    tone(220,0.12,'sawtooth',0.12); tone(180,0.14,'sawtooth',0.10,0.06);
+    tone(140,0.18,'sawtooth',0.08,0.12);
+  },
+  win: ()=>{
+    [523,659,784,1047,1319].forEach((f,i)=>tone(f,0.20,'triangle',0.12,i*0.12));
+    tone(1568,0.35,'triangle',0.10,0.65);
+  },
+  gameover: ()=>{
+    [392,330,262,196].forEach((f,i)=>tone(f,0.24,'sawtooth',0.10,i*0.20));
+  },
+  oneUp: ()=>{
+    tone(523,0.08,'triangle',0.10); tone(659,0.08,'triangle',0.10,0.08);
+    tone(784,0.10,'triangle',0.10,0.16); tone(1047,0.25,'triangle',0.10,0.24);
+  }
 };
+
+/* background music removed by user request */
 
 /* physics */
 function moveAndCollide(ent,dt,solids){
@@ -1009,7 +1119,22 @@ function moveAndCollide(ent,dt,solids){
     if(ceilY !== null){ ent.y = ceilY; ent.vy = 0; }
     else { ent.y = targetY; }
   }
+
+  // ---- rescue: never stay embedded inside a solid ----
+  // If our feet ended up just inside a platform's top (pushed by a moving
+  // platform, a ledge climb, or a rounding error) pop back on top instead of
+  // silently sinking through on the next frame.
+  for(const r of solids){
+    if(ent.x + ent.w <= r.x + 0.5 || ent.x >= r.x + r.w - 0.5) continue;
+    const feet = ent.y + ent.h;
+    if(ent.y < r.y && feet > r.y && feet < r.y + Math.min(r.h, 14)){
+      ent.y = r.y - ent.h;
+      if(ent.vy > 0) ent.vy = 0;
+      ent.onGround = true;
+    }
+  }
 }
+
 
 function checkLedgeGrab(plats){
   if(player.onGround || player.isLedgeHanging || player.isClimbing) return;
@@ -1045,17 +1170,79 @@ function checkLedgeGrab(plats){
 }
 
 function addPopup(x,y,text,color){ popups.push({x,y,text,color:color||COLORS.gold,life:0.9,maxLife:0.9}); }
-function spawnParticles(x,y,count,color){
+function spawnParticles(x,y,count,color,opts){
+  opts = opts || {};
   for(let i=0;i<count;i++){
+    const angle = Math.random()*Math.PI*2;
+    const speed = opts.speed || (60 + Math.random()*70);
     particles.push({
       x, y,
-      vx:(Math.random()-0.5)*90,
-      vy:-Math.random()*90-20,
-      life:0.5, maxLife:0.5, color
+      vx: Math.cos(angle)*speed*(0.5+Math.random()*0.5),
+      vy: Math.sin(angle)*speed*(0.5+Math.random()*0.5) + (opts.gravity?0:-20),
+      life: opts.life || 0.5, maxLife: opts.life || 0.5,
+      color,
+      size: opts.size || (1.5 + Math.random()*1.5),
+      shape: opts.shape || 'circle',
+      gravity: opts.gravity || 0,
+      rotation: Math.random()*Math.PI*2,
+      rotSpeed: (Math.random()-0.5)*8
     });
   }
 }
-function triggerShake(mag){ shakeTimer = SHAKE_DURATION; shakeMag = mag; }
+function spawnDust(x,y,count,dir){
+  for(let i=0;i<count;i++){
+    particles.push({
+      x, y,
+      vx: (Math.random()-0.5)*40 + (dir||0)*20,
+      vy: -Math.random()*30 - 10,
+      life: 0.35, maxLife: 0.35,
+      color: 'rgba(255,255,255,0.55)',
+      size: 2 + Math.random()*3,
+      shape: 'puff',
+      gravity: 30,
+      rotation: Math.random()*Math.PI*2,
+      rotSpeed: (Math.random()-0.5)*3
+    });
+  }
+}
+function spawnStarBurst(x,y,count){
+  for(let i=0;i<count;i++){
+    const a = (i/count)*Math.PI*2 + Math.random()*0.3;
+    const s = 50 + Math.random()*60;
+    particles.push({
+      x, y,
+      vx: Math.cos(a)*s,
+      vy: Math.sin(a)*s,
+      life: 0.55, maxLife: 0.55,
+      color: ['#FFD100','#F7941D','#F4739E','#2AAAE2'][i%4],
+      size: 2 + Math.random()*2,
+      shape: 'star',
+      gravity: 60,
+      rotation: Math.random()*Math.PI*2,
+      rotSpeed: (Math.random()-0.5)*10
+    });
+  }
+}
+function spawnPoof(x,y,count){
+  for(let i=0;i<count;i++){
+    particles.push({
+      x, y,
+      vx: (Math.random()-0.5)*60,
+      vy: -Math.random()*50 - 20,
+      life: 0.45, maxLife: 0.45,
+      color: 'rgba(255,255,255,0.7)',
+      size: 3 + Math.random()*5,
+      shape: 'puff',
+      gravity: 20,
+      rotation: Math.random()*Math.PI*2,
+      rotSpeed: (Math.random()-0.5)*4
+    });
+  }
+}
+function triggerShake(mag,dur){
+  shakeTimer = dur || SHAKE_DURATION;
+  shakeMag = mag;
+}
 function findSafeSpawn(x){
   let best = null;
   for(const r of GROUND_RECTS){
@@ -1084,7 +1271,8 @@ function loseLife(){
   player.ledgePlatform = null;
   player.invuln = 1.4;
   camX = clamp(player.x + player.w/2 - GAME_W/2, 0, Math.max(0, WORLD_LEN - GAME_W));
-  SFX.hurt(); triggerShake(4);
+  spawnPoof(player.x+player.w/2, player.y+player.h/2, 10);
+  SFX.hurt(); triggerShake(5, 0.22);
 }
 
 /* loop */
@@ -1102,7 +1290,9 @@ function update(dt){
       saveBest();
       SFX.win();
       player.squashAmt = 0.4;
-      spawnParticles(player.x+player.w/2, player.y+player.h, 8, '#FFFFFF');
+      spawnStarBurst(player.x+player.w/2, player.y+player.h/2, 14);
+      spawnPoof(player.x+player.w/2, player.y+player.h, 8);
+      triggerShake(3.5, 0.25);
     }
     return;
   }
@@ -1152,30 +1342,42 @@ function update(dt){
 
   player.squashAmt *= Math.exp(-dt*11);
 
+  // dancing stops as soon as you move, jump or leave the ground
+  if(player.isDancing && (input.left || input.right || input.up || jumpQueued ||
+     !player.onGround || player.isLedgeHanging || player.isClimbing)){
+    player.isDancing = false;
+  }
+
+
   if(player.isClimbing){
     player.vx = 0;
     player.vy = 0;
     player.climbTimer += dt;
     const t = Math.min(1, player.climbTimer / player.climbDuration);
+    // Climb targets are stored relative to the platform, so a platform that
+    // moves (especially a rising elevator) carries the climb with it.
+    const cp = player.climbPlat || { x:0, y:0 };
 
     if(t < 0.5){
       const e = smoothstep(t/0.5);
-      player.x = lerp(player.climbFrom.x, player.climbMid.x, e);
-      player.y = lerp(player.climbFrom.y, player.climbMid.y, e);
+      player.x = cp.x + lerp(player.climbFrom.x, player.climbMid.x, e);
+      player.y = cp.y + lerp(player.climbFrom.y, player.climbMid.y, e);
     } else {
       const e = smoothstep((t-0.5)/0.5);
-      player.x = lerp(player.climbMid.x, player.climbTo.x, e);
-      player.y = lerp(player.climbMid.y, player.climbTo.y, e);
+      player.x = cp.x + lerp(player.climbMid.x, player.climbTo.x, e);
+      player.y = cp.y + lerp(player.climbMid.y, player.climbTo.y, e);
     }
 
     if(t>=1){
-      player.x = player.climbTo.x;
-      player.y = player.climbTo.y;
+      player.x = cp.x + player.climbTo.x;
+      player.y = cp.y + player.climbTo.y;
       player.isClimbing = false;
+      player.climbPlat = null;
       player.onGround = true;
       player.squashAmt = 0.3;
     }
   } else if(player.isLedgeHanging){
+
     player.vx = 0;
     player.vy = 0;
 
@@ -1190,14 +1392,16 @@ function update(dt){
     if(jumpQueued || input.up){
       if(player.ledgePlatform){
         const r = player.ledgePlatform;
-        const finalX = player.ledgeSide === 'left' ? r.x + 2 : r.x + r.w - player.w - 2;
-        const finalY = r.y - player.h;
-        player.climbFrom = { x: player.x, y: player.y };
-        player.climbMid = { x: player.x, y: r.y - player.h - 5 };
+        const finalX = player.ledgeSide === 'left' ? 2 : r.w - player.w - 2;
+        const finalY = -player.h;
+        player.climbPlat = r;
+        player.climbFrom = { x: player.x - r.x, y: player.y - r.y };
+        player.climbMid = { x: player.x - r.x, y: -player.h - 5 };
         player.climbTo = { x: finalX, y: finalY };
         player.climbTimer = 0;
         player.isClimbing = true;
       }
+
       player.isLedgeHanging = false;
       jumpQueued = false;
       SFX.jump();
@@ -1246,10 +1450,16 @@ function update(dt){
     moveAndCollide(player, dt, solids);
     checkLedgeGrab(PLATFORM_TEMPLATE);
 
+    // update animation state
+    updatePlayerAnimation(dt);
+
     if(!wasOnGround && player.onGround){
       const impact = clamp(preVY/JUMP_SPEED, 0, 1.4);
       player.squashAmt = 0.28 + impact*0.35;
-      if(impact>0.5) spawnParticles(player.x+player.w/2, player.y+player.h, 4, '#FFFFFF');
+      if(impact>0.35){
+        spawnDust(player.x+player.w/2, player.y+player.h, Math.floor(2+impact*4), player.facing);
+        triggerShake(1.5 + impact*2, 0.12);
+      }
     }
   }
 
@@ -1312,12 +1522,13 @@ function update(dt){
       const feetBefore = (player.prevFeet != null ? player.prevFeet : feetNow);
       const stomping = player.vy > 0 && (feetBefore <= en.y + 4 || feetNow <= en.y + en.h*0.6);
       if(canStomp && stomping){
-        en.alive = false; en.deathTimer = 0.3;
+        en.alive = false; en.deathTimer = 0.35;
         player.vy = -JUMP_SPEED * 0.55;
         player.squashAmt = -0.3;
         score += (typ === 'duck' ? 150 : 100);
-        addPopup(en.x+en.w/2, en.y, typ==='duck'?'+150':'+100', '#FFFFFF');
-        spawnParticles(en.x+en.w/2, en.y+en.h/2, 8, '#FFFFFF');
+        addPopup(en.x+en.w/2, en.y-6, typ==='duck'?'+150':'+100', '#FFFFFF');
+        spawnPoof(en.x+en.w/2, en.y+en.h/2, 10);
+        triggerShake(2, 0.12);
         SFX.stomp();
       } else if(player.invuln <= 0){
         lives--;
@@ -1340,14 +1551,14 @@ function update(dt){
     const ballRect = {x:c.x-6,y:c.y-6,w:12,h:12};
     if(rectsOverlap(player,ballRect)){
       c.taken = true; coinCount++; score += 10;
-      addPopup(c.x, c.y-8, '+10');
-      spawnParticles(c.x,c.y,6,COLORS.gold);
+      addPopup(c.x, c.y-10, '+10', COLORS.gold);
+      spawnStarBurst(c.x, c.y, 8);
       SFX.coin();
     }
   }
 
 
-  if(score>=nextLifeScore){ lives++; nextLifeScore += 2000; }
+  if(score>=nextLifeScore){ lives++; nextLifeScore += 2000; addPopup(player.x+player.w/2, player.y-14, '1UP!', COLORS.pocoyoGreen); SFX.oneUp(); }
   if(player.y>GAME_H+30){ loseLife(); }
 
   if(state==='playing' && player.x+player.w>=FLAG_X){
@@ -1363,7 +1574,10 @@ function update(dt){
   }
 
   for(const p of particles){
-    p.x += p.vx*dt; p.y += p.vy*dt; p.vy += 260*dt; p.life -= dt;
+    p.x += p.vx*dt; p.y += p.vy*dt;
+    p.vy += (p.gravity || 260)*dt;
+    p.rotation += p.rotSpeed*dt;
+    p.life -= dt;
   }
   particles = particles.filter(p=>p.life>0);
   for(const q of popups){ q.y -= 26*dt; q.life -= dt; }
@@ -1371,12 +1585,14 @@ function update(dt){
 
   // running dust
   if(player.onGround && Math.abs(player.vx) > 60 && Math.random() < dt*18){
-    particles.push({x:player.x+player.w/2, y:player.y+player.h, vx:-player.facing*30*Math.random(), vy:-20*Math.random(), life:0.3, maxLife:0.3, color:'#FFFFFF'});
+    spawnDust(player.x+player.w/2, player.y+player.h, 1, -player.facing);
   }
 
-  const lookAhead = clamp(player.vx/MAX_SPEED, -1, 1) * 40;
+  const lookAhead = clamp(player.vx/MAX_SPEED, -1, 1) * 50;
   const targetCam = clamp(player.x+player.w/2-GAME_W/2+lookAhead, 0, Math.max(0, WORLD_LEN-GAME_W));
-  camX += (targetCam-camX) * Math.min(1, dt*7);
+  // smoother follow, with subtle landing recoil
+  const camSpeed = player.onGround ? 5 : 3.5;
+  camX += (targetCam-camX) * Math.min(1, dt*camSpeed);
 
   if(shakeTimer>0) shakeTimer = Math.max(0, shakeTimer-dt);
 }
@@ -1445,6 +1661,14 @@ function drawSky(){
     ctx.beginPath(); ctx.arc(sunX,sunY,18,0,Math.PI*2); ctx.fill();
     ctx.restore();
   }
+
+  // Pocoyo friends in the distance
+  ctx.save();
+  ctx.translate(Math.round(-camX*0.04), 0);
+  drawSleepyBird(120 + Math.sin(elapsed*0.3)*8, 38 + Math.cos(elapsed*0.25)*4, 0.65);
+  drawPatoHat(260, 52, 0.7);
+  drawEllyBall(520, 48 + Math.sin(elapsed*1.2)*3, 0.7);
+  ctx.restore();
 
   // drifting clouds (dimmer at night)
   ctx.save();
@@ -1634,11 +1858,22 @@ function drawPopups(){
 }
 function drawParticles(){
   for(const p of particles){
-    ctx.globalAlpha = Math.max(0, p.life/p.maxLife);
+    const alpha = Math.max(0, p.life/p.maxLife);
+    ctx.globalAlpha = alpha;
     ctx.fillStyle = p.color;
-    ctx.beginPath();
-    ctx.arc(p.x,p.y,1.8,0,Math.PI*2);
-    ctx.fill();
+    ctx.save();
+    ctx.translate(p.x,p.y);
+    ctx.rotate(p.rotation + p.rotSpeed*(p.maxLife-p.life));
+    if(p.shape === 'star'){
+      drawStar(0,0,p.size,5,p.size*0.45);
+      ctx.fillStyle = p.color; ctx.fill();
+    } else if(p.shape === 'puff'){
+      ctx.beginPath(); ctx.arc(0,0,p.size,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(p.size*0.4,p.size*0.3,p.size*0.6,0,Math.PI*2); ctx.fill();
+    } else {
+      ctx.beginPath(); ctx.arc(0,0,p.size,0,Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
   }
   ctx.globalAlpha = 1;
 }
@@ -1799,14 +2034,45 @@ function drawEnemies(){
 }
 
 /* sprite */
+function updatePlayerAnimation(dt){
+  player.animTimer += dt;
+  player.trailTimer -= dt;
+
+  // blink
+  player.blinkTimer -= dt;
+  if(player.blinkTimer <= 0){
+    player.isBlinking = !player.isBlinking;
+    player.blinkTimer = player.isBlinking ? 0.12 : 2.5 + Math.random()*2;
+  }
+
+  // hat and scarf react to movement
+  const speed = Math.abs(player.vx);
+  const targetTilt = player.facing * Math.min(0.25, speed/MAX_SPEED * 0.25) + (player.vy<0?-0.05:0) + (player.vy>0?0.05:0);
+  player.hatTilt = lerp(player.hatTilt, targetTilt, dt*8);
+  player.scarfWave += dt * (8 + speed/MAX_SPEED*10);
+
+  // determine state
+  let nextState = player.animState;
+  if(player.isClimbing) nextState = 'climb';
+  else if(player.isLedgeHanging) nextState = 'hang';
+  else if(!player.onGround) nextState = player.vy < 0 ? 'jump' : 'fall';
+  else if(Math.abs(player.vx) > 8) nextState = 'run';
+  else nextState = 'idle';
+
+  if(nextState !== player.animState){
+    player.animState = nextState;
+    player.animTimer = 0;
+  }
+}
+
 function drawPlayerSpriteAt(x, y, facing){
   ctx.save();
   ctx.translate(x, y);
 
   let scaleX = facing < 0 ? 1 : -1;
   const sq = player.squashAmt;
-  const scaleY = 1 - sq*0.5;
-  const scaleXAdj = 1 + sq*0.5;
+  const scaleY = 1 - sq*0.55;
+  const scaleXAdj = 1 + sq*0.45;
 
   let frame = 0;
   const moving = Math.abs(player.vx) > 8 && player.onGround;
@@ -1815,7 +2081,7 @@ function drawPlayerSpriteAt(x, y, facing){
     frame = Math.floor(player.runPhase) % RUN_FRAMES;
   } else {
     frame = 0;
-    bobY = Math.sin(elapsed*2.4)*1;
+    bobY = Math.sin(elapsed*2.4)*1.2;
   }
 
   ctx.translate(0, bobY);
@@ -1834,12 +2100,12 @@ function drawJumpSpriteAt(x, y, facing, falling){
 
   let scaleX = facing < 0 ? -1 : 1;
   const sq = player.squashAmt;
-  let scaleY = 1 - sq*0.5;
-  let scaleXAdj = 1 + sq*0.5;
-  const rot = facing * -0.1;
+  let scaleY = falling ? (1 - sq*0.5) : (1.08 - sq*0.4);
+  let scaleXAdj = falling ? (1 + sq*0.5) : (0.92 + sq*0.35);
+  const rot = facing * (falling ? 0.12 : -0.08);
 
   if(falling){
-    const pulse = Math.sin(elapsed*7) * 0.07;
+    const pulse = Math.sin(elapsed*7) * 0.05;
     scaleY *= 1 + pulse;
     scaleXAdj *= 1 - pulse;
   }
@@ -1862,7 +2128,7 @@ function drawHangingSpriteAt(x, y, facing, sway){
   let scaleX = facing < 0 ? -1 : 1;
   ctx.scale(scaleX, 1);
 
-  const dangle = sway ? (Math.sin(elapsed * 2.4) * 0.09 + Math.sin(elapsed * 1.15) * 0.03) : 0;
+  const dangle = sway ? (Math.sin(elapsed * 2.4) * 0.12 + Math.sin(elapsed * 1.15) * 0.04) : 0;
   ctx.rotate(dangle);
 
   // Scaled to match run sprite size; arm raised high — anchor near hand tip
@@ -1870,7 +2136,7 @@ function drawHangingSpriteAt(x, y, facing, sway){
   const drawW = drawH * (212/282);
 
   const handOffsetX = -drawW * 0.55;
-  const handOffsetY = -3 + (sway ? Math.sin(elapsed * 2.4 + 0.6) * 0.7 : 0);
+  const handOffsetY = -3 + (sway ? Math.sin(elapsed * 2.4 + 0.6) * 0.9 : 0);
 
   ctx.drawImage(hangImg, handOffsetX, handOffsetY, drawW, drawH);
 
@@ -1881,7 +2147,7 @@ function drawSlideSpriteAt(x, y, facing){
   ctx.save();
   ctx.translate(x, y);
   ctx.scale(facing < 0 ? -1 : 1, 1);
-  ctx.rotate(Math.sin(elapsed*9)*0.03);
+  ctx.rotate(Math.sin(elapsed*9)*0.05);
   const drawH = SPRITE_H * 1.05;
   const drawW = drawH * (158/220);
   // hands hug the pole: shift body slightly to the side of the pole
@@ -1890,6 +2156,9 @@ function drawSlideSpriteAt(x, y, facing){
 }
 
 function drawPlayer(){
+  // while dancing the animated GIF overlay stands in for the sprite
+  if(player.isDancing && state==='playing') return;
+
   if(state==='sliding'){
     drawSlideSpriteAt(player.x + player.w/2, player.y + player.h, 1);
     return;
@@ -1912,33 +2181,51 @@ function drawPlayer(){
 }
 
 function drawHUD(){
-  roundRect(6,4,150,24,10);
-  ctx.fillStyle = 'rgba(255,247,230,0.85)';
-  ctx.fill();
-  drawGameText('SCORE '+String(score).padStart(6,'0'), 14, 21, {size:11, align:'left', color:COLORS.ink});
+  ctx.save();
+  ctx.shadowColor = 'rgba(43,35,64,0.15)';
+  ctx.shadowBlur = 6;
+  ctx.shadowOffsetY = 2;
 
+  // Score panel
+  roundRect(6,4,150,24,10);
+  ctx.fillStyle = 'rgba(255,247,230,0.92)';
+  ctx.fill();
+  drawGameText('SCORE '+String(score).padStart(6,'0'), 14, 21, {size:11, align:'left', color:COLORS.ink, weight:'700'});
+
+  // Coins panel
   roundRect(162,4,74,24,10);
-  ctx.fillStyle = 'rgba(255,247,230,0.85)';
+  ctx.fillStyle = 'rgba(255,247,230,0.92)';
   ctx.fill();
   drawBall(178,16);
-  drawGameText('x'+coinCount, 190, 21, {size:11, align:'left', color:COLORS.ink});
+  drawGameText('x'+coinCount, 190, 21, {size:11, align:'left', color:COLORS.ink, weight:'700'});
 
-
+  // Lives panel with little Pocoyo faces
   roundRect(GAME_W-190,4,100,24,10);
-  ctx.fillStyle = 'rgba(255,247,230,0.85)';
+  ctx.fillStyle = 'rgba(255,247,230,0.92)';
   ctx.fill();
-  drawGameText('LIVES x'+lives, GAME_W-182, 21, {size:11, align:'left', color:COLORS.danger});
+  for(let i=0;i<lives;i++){
+    const lx = GAME_W-180 + i*18;
+    ctx.fillStyle = COLORS.pocoyoBlue;
+    ctx.beginPath(); ctx.arc(lx+6, 16, 5, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(lx+4, 14, 1.5, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(lx+8, 14, 1.5, 0, Math.PI*2); ctx.fill();
+  }
 
+  // Timer panel
   roundRect(GAME_W-84,4,78,24,10);
-  ctx.fillStyle = 'rgba(255,247,230,0.85)';
+  ctx.fillStyle = timeLeft <= 10 ? 'rgba(244,87,60,0.9)' : 'rgba(255,247,230,0.92)';
   ctx.fill();
-  drawGameText('⏱ '+Math.ceil(timeLeft), GAME_W-12, 21, {size:11, align:'right', color:COLORS.ink});
+  const timerColor = timeLeft <= 10 ? '#fff' : COLORS.ink;
+  drawGameText('⏱ '+Math.ceil(timeLeft), GAME_W-12, 21, {size:11, align:'right', color:timerColor, weight:'700'});
 
-  // level indicator
+  // Level indicator
   roundRect(GAME_W-190,30,100,18,8);
-  ctx.fillStyle = 'rgba(255,247,230,0.75)';
+  ctx.fillStyle = 'rgba(255,247,230,0.82)';
   ctx.fill();
-  drawGameText('LEVEL '+currentLevel+'/'+TOTAL_LEVELS, GAME_W-140, 43, {size:9, align:'center', color:COLORS.ink});
+  drawGameText('LEVEL '+currentLevel+'/'+TOTAL_LEVELS, GAME_W-140, 43, {size:9, align:'center', color:COLORS.ink, weight:'700'});
+
+  ctx.restore();
 }
 
 function drawOverlay(alpha){
@@ -1947,58 +2234,85 @@ function drawOverlay(alpha){
 }
 
 function drawStartScreen(){
-  drawOverlay(0.4);
-  const bob = Math.sin(elapsed*2.4)*4;
-  drawPlayerSpriteAt(GAME_W/2, 150+bob, 1);
-  drawGameText("POCOYO'S", GAME_W/2, 62, {size:26, align:'center', color:COLORS.gold, weight:'800'});
-  drawGameText('SUNNY ADVENTURE', GAME_W/2, 88, {size:16, align:'center', color:'#fff', weight:'700'});
-  if(Math.floor(elapsed*2)%2===0){
-    drawGameText('TAP OR PRESS SPACE TO PLAY', GAME_W/2, 200, {size:11, align:'center', color:'#fff'});
+  drawOverlay(0.35);
+  const bob = Math.sin(elapsed*2.4)*5;
+  drawPlayerSpriteAt(GAME_W/2, 145+bob, 1);
+  // decorative stars around title
+  ctx.save();
+  ctx.translate(GAME_W/2, 75);
+  for(let i=0;i<5;i++){
+    const a = elapsed*0.8 + i*Math.PI*2/5;
+    const r = 75 + Math.sin(elapsed*2+i)*3;
+    const sx = Math.cos(a)*r, sy = Math.sin(a)*r*0.35;
+    ctx.fillStyle = ['#FFD100','#F7941D','#F4739E','#2AAAE2','#9B6FD1'][i];
+    drawStar(sx, sy, 3 + Math.sin(elapsed*3+i)*1, 5, 2); ctx.fill();
   }
-  drawGameText('ARROWS / TOUCH MOVE  ·  SPACE JUMP  ·  UP GRABS LEDGES', GAME_W/2, 225, {size:8, align:'center', color:'#E6F7FF'});
-  drawGameText('HOP ON CLOUDS, DUCKS & BEES  ·  NEVER TOUCH SPIKY URCHINS', GAME_W/2, 240, {size:8, align:'center', color:'#E6F7FF'});
+  ctx.restore();
+
+  drawGameText("POCOYO'S", GAME_W/2, 62, {size:28, align:'center', color:COLORS.pocoyoBlue, weight:'800'});
+  drawGameText('SUNNY ADVENTURE', GAME_W/2, 90, {size:18, align:'center', color:'#fff', weight:'700'});
+
+  // start prompt with rounded button backing
+  const pulse = 0.85 + Math.sin(elapsed*3)*0.15;
+  roundRect(GAME_W/2-92, 188, 184, 24, 12);
+  ctx.fillStyle = 'rgba(255,247,230,'+pulse+')';
+  ctx.fill();
+  drawGameText('TAP OR PRESS SPACE', GAME_W/2, 204, {size:11, align:'center', color:COLORS.ink, weight:'700'});
+
+  drawGameText('ARROWS / TOUCH MOVE  ·  SPACE JUMP  ·  UP GRABS LEDGES', GAME_W/2, 230, {size:8, align:'center', color:'#E6F7FF'});
+  drawGameText('HOP ON CLOUDS, DUCKS & BEES  ·  NEVER TOUCH SPIKY URCHINS', GAME_W/2, 245, {size:8, align:'center', color:'#E6F7FF'});
 }
 
 function drawPauseOverlay(){
   drawOverlay(0.45);
-  drawGameText('PAUSED', GAME_W/2, 130, {size:22, align:'center', color:'#fff'});
-  drawGameText('PRESS P OR TAP PAUSE TO RESUME', GAME_W/2, 155, {size:10, align:'center', color:'#E6F7FF'});
+  roundRect(GAME_W/2-70, 108, 140, 58, 14);
+  ctx.fillStyle = 'rgba(255,247,230,0.92)';
+  ctx.fill();
+  drawGameText('PAUSED', GAME_W/2, 135, {size:22, align:'center', color:COLORS.ink, weight:'800'});
+  drawGameText('PRESS P OR TAP PAUSE', GAME_W/2, 155, {size:9, align:'center', color:COLORS.ink});
 }
 
 function drawGameOverScreen(){
   drawOverlay(0.55);
-  drawGameText('OH NO!', GAME_W/2, 100, {size:26, align:'center', color:COLORS.danger, weight:'800'});
-  drawGameText('SCORE '+String(score).padStart(6,'0'), GAME_W/2, 135, {size:13, align:'center', color:'#fff'});
-  drawGameText('BEST '+String(bestScore).padStart(6,'0'), GAME_W/2, 152, {size:10, align:'center', color:COLORS.gold});
-  if(Math.floor(elapsed*2)%2===0){
-    drawGameText('TAP OR PRESS SPACE TO TRY AGAIN', GAME_W/2, 172, {size:10, align:'center', color:'#fff'});
-  }
+  drawGameText('OH NO!', GAME_W/2, 95, {size:26, align:'center', color:COLORS.danger, weight:'800'});
+  roundRect(GAME_W/2-90, 120, 180, 52, 12);
+  ctx.fillStyle = 'rgba(255,247,230,0.9)';
+  ctx.fill();
+  drawGameText('SCORE '+String(score).padStart(6,'0'), GAME_W/2, 142, {size:13, align:'center', color:COLORS.ink, weight:'700'});
+  drawGameText('BEST '+String(bestScore).padStart(6,'0'), GAME_W/2, 160, {size:10, align:'center', color:COLORS.pocoyoOrange});
+  const pulse = 0.85 + Math.sin(elapsed*3)*0.15;
+  drawGameText('TAP OR PRESS SPACE TO TRY AGAIN', GAME_W/2, 190, {size:10, align:'center', color:'rgba(255,255,255,'+pulse+')', weight:'700'});
 }
 
 function drawWinScreen(){
   drawOverlay(0.35);
   const bounce = Math.abs(Math.sin(elapsed*3.2))*14;
   if(currentLevel < TOTAL_LEVELS){
-    drawGameText('LEVEL '+currentLevel+' CLEAR!', GAME_W/2, 55, {size:20, align:'center', color:COLORS.gold, weight:'800'});
-    drawGameText('GET READY FOR LEVEL '+(currentLevel+1), GAME_W/2, 80, {size:12, align:'center', color:'#fff'});
+    drawGameText('LEVEL '+currentLevel+' CLEAR!', GAME_W/2, 50, {size:20, align:'center', color:COLORS.gold, weight:'800'});
+    drawGameText('GET READY FOR LEVEL '+(currentLevel+1), GAME_W/2, 75, {size:12, align:'center', color:'#fff'});
   } else {
-    drawGameText('YAY! YOU DID IT!', GAME_W/2, 35, {size:16, align:'center', color:COLORS.gold, weight:'800'});
-    drawGameText('ALL LEVELS COMPLETE!', GAME_W/2, 52, {size:10, align:'center', color:'#fff'});
-    drawGameText('HAPPY BIRTHDAY MARSH!', GAME_W/2, 72, {size:13, align:'center', color:COLORS.gold, weight:'800'});
+    drawGameText('YAY! YOU DID IT!', GAME_W/2, 30, {size:18, align:'center', color:COLORS.gold, weight:'800'});
+    drawGameText('ALL LEVELS COMPLETE!', GAME_W/2, 50, {size:11, align:'center', color:'#fff'});
+    drawGameText('HAPPY BIRTHDAY MARSH!', GAME_W/2, 70, {size:14, align:'center', color:COLORS.pocoyoPink, weight:'800'});
     drawGameText('THANK YOU FOR BEING OUR FRIEND', GAME_W/2, 88, {size:9, align:'center', color:'#fff'});
   }
-  drawPlayerSpriteAt(GAME_W/2, 175-bounce, 1);
+  drawPlayerSpriteAt(GAME_W/2, 170-bounce, 1);
   if(currentLevel < TOTAL_LEVELS){
-    drawGameText('SCORE '+String(score).padStart(6,'0'), GAME_W/2, 100, {size:14, align:'center', color:'#fff'});
-    drawGameText('BEST '+String(bestScore).padStart(6,'0'), GAME_W/2, 118, {size:10, align:'center', color:COLORS.gold});
+    roundRect(GAME_W/2-80, 98, 160, 42, 12);
+    ctx.fillStyle = 'rgba(255,247,230,0.9)';
+    ctx.fill();
+    drawGameText('SCORE '+String(score).padStart(6,'0'), GAME_W/2, 120, {size:13, align:'center', color:COLORS.ink, weight:'700'});
+    drawGameText('BEST '+String(bestScore).padStart(6,'0'), GAME_W/2, 135, {size:9, align:'center', color:COLORS.pocoyoOrange});
   } else {
-    drawGameText('SCORE '+String(score).padStart(6,'0'), GAME_W/2, 200, {size:12, align:'center', color:'#fff'});
-    drawGameText('BEST '+String(bestScore).padStart(6,'0'), GAME_W/2, 216, {size:9, align:'center', color:COLORS.gold});
+    roundRect(GAME_W/2-80, 188, 160, 42, 12);
+    ctx.fillStyle = 'rgba(255,247,230,0.9)';
+    ctx.fill();
+    drawGameText('SCORE '+String(score).padStart(6,'0'), GAME_W/2, 210, {size:12, align:'center', color:COLORS.ink, weight:'700'});
+    drawGameText('BEST '+String(bestScore).padStart(6,'0'), GAME_W/2, 226, {size:9, align:'center', color:COLORS.pocoyoOrange});
   }
-  if(Math.floor(elapsed*2)%2===0){
-    const msg = currentLevel < TOTAL_LEVELS ? 'TAP OR PRESS SPACE FOR NEXT LEVEL' : 'TAP OR PRESS SPACE TO PLAY AGAIN';
-    drawGameText(msg, GAME_W/2, 245, {size:9, align:'center', color:'#fff'});
-  }
+  const pulse = 0.85 + Math.sin(elapsed*3)*0.15;
+  const msg = currentLevel < TOTAL_LEVELS ? 'TAP OR PRESS SPACE FOR NEXT LEVEL' : 'TAP OR PRESS SPACE TO PLAY AGAIN';
+  drawGameText(msg, GAME_W/2, 250, {size:9, align:'center', color:'rgba(255,255,255,'+pulse+')', weight:'700'});
 
   // (FOR MARSH ONLY) button on final win screen
   if(currentLevel >= TOTAL_LEVELS){
@@ -2093,7 +2407,32 @@ function drawFlag(){
   ctx.beginPath(); ctx.arc(cx,cy,2,0,Math.PI*2); ctx.fill();
 }
 
+/* dance GIF overlay – sized to match the in-game sprite */
+const danceImgEl = document.getElementById('dance-gif');
+function updateDanceOverlay(){
+  if(!danceImgEl) return;
+  if(state !== 'playing' || !player.isDancing){
+    if(danceImgEl.style.display !== 'none') danceImgEl.style.display = 'none';
+    return;
+  }
+  const rect = canvas.getBoundingClientRect();
+  const scale = Math.min(rect.width/GAME_W, rect.height/GAME_H);
+  const offX = rect.left + (rect.width - GAME_W*scale)/2;
+  const offY = rect.top + (rect.height - GAME_H*scale)/2;
+  const h = SPRITE_H * scale;
+  const w = h * 0.72;
+  const cx = offX + (player.x + player.w/2 - camX) * scale;
+  const by = offY + (player.y + player.h) * scale;
+  danceImgEl.style.display = 'block';
+  danceImgEl.style.width = w + 'px';
+  danceImgEl.style.height = h + 'px';
+  danceImgEl.style.left = (cx - w/2) + 'px';
+  danceImgEl.style.top = (by - h) + 'px';
+  danceImgEl.style.transform = player.facing < 0 ? 'scaleX(-1)' : 'none';
+}
+
 /* main loop */
+
 let lastTime = 0;
 function loop(ts){
   if(!lastTime) lastTime = ts;
@@ -2104,6 +2443,8 @@ function loop(ts){
   menuLock = Math.max(0, menuLock - dt);
   update(dt);
   render();
+  updateDanceOverlay();
+
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
